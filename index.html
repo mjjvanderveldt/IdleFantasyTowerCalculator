@@ -176,7 +176,10 @@ code{font-family:ui-monospace,monospace;font-size:.88em;background:var(--raised)
       <section class="panel">
         <h2>Your climb</h2>
         <div class="pad stack">
-          <label><span>Highest floor you have cleared</span><input type="number" id="cur" value="74" min="0" max="249"></label>
+          <div class="row">
+            <label><span>Starting floor &mdash; where you are now</span><input type="number" id="cur" value="50" min="0" max="249"></label>
+            <label><span>Best floor ever reached</span><input type="number" id="best" value="74" min="0" max="250"></label>
+          </div>
           <p class="tiny" id="curNote" style="margin:0"></p>
           <label><span>Simulated climbs &mdash; this tool's accuracy, not a game setting</span>
             <select id="trials">
@@ -359,13 +362,18 @@ var MS=[[10,"Tower Ring"],[20,"+1% tower XP"],[30,"5,000 coins"],[40,"Tower Shie
  [170,"+1% coin drops"],[180,"Tower Sword"],[190,"+2% tower XP"],[200,"Tower Cape"],[210,"+50 max HP"],
  [220,"Tower Crossbow"],[230,"+1% coin drops"],[240,"+2% tower XP"],[250,"Void Staff"]];
 
+function bestF(){ return Math.max(+$('best').value,+$('cur').value); }
 function curNote(){
-  var c=+$('cur').value, cp=Math.floor(c/25)*25;
-  $('curNote').innerHTML='Next attempt is <b>floor '+(c+1)+'</b> — you never pick. Die anywhere and you '+
-    'restart from <b>floor '+(cp+1)+'</b> (checkpoint '+cp+'); your best floor of '+c+' is kept.'+
-    (c%25===24?' <b class="c-risky">One more clear moves your checkpoint to '+(c+1)+'.</b>':'');
+  var c=+$('cur').value, b=bestF(), cp=Math.floor(b/25)*25;
+  var h='Next attempt is <b>floor '+(c+1)+'</b> — the tower never lets you pick. ';
+  h+='Die anywhere and you drop to <b>floor '+(cp+1)+'</b> (checkpoint '+cp+'), but your record of '+b+' is kept, '+
+     'and milestones are claimed off that record.';
+  if(b>c) h+=' <b>You are '+(b-c)+' floors below your record</b> — those are a re-climb you have already proved you can do.';
+  if(b%25===24) h+=' <b class="c-risky">One more clear past '+b+' moves your checkpoint to '+(b+1)+'.</b>';
+  $('curNote').innerHTML=h;
 }
 $('cur').addEventListener('input',curNote);
+$('best').addEventListener('input',curNote);
 
 function pct(a,b){ return b>0?100*a/b:0; }
 function median(a){ var s=a.slice().sort(function(x,y){return x-y;}); return s[(s.length/2)|0]; }
@@ -396,10 +404,11 @@ function render(acc,ends,used,atts,starved,N,cur,P){
   var med=median(ends), avgUsed=used.reduce(function(a,b){return a+b;},0)/N;
   var avgAtt=atts.reduce(function(a,b){return a+b;},0)/N;
   var hrs=avgAtt*P.mins/60;
-  var ms=null; for(var i=0;i<MS.length;i++){ if(MS[i][0]>cur){ ms=MS[i]; break; } }
+  var b=bestF();
+  var ms=null; for(var i=0;i<MS.length;i++){ if(MS[i][0]>b){ ms=MS[i]; break; } }
   var msP=ms?100*ends.filter(function(e){return e>=ms[0];}).length/N:100;
   var runs=msP>0?Math.ceil(100/msP):null;
-  var cp=Math.floor(cur/25)*25, bankT=cp+25;
+  var cp=Math.floor(b/25)*25, bankT=cp+25;
   var bankP=100*ends.filter(function(e){return e>=bankT;}).length/N;
   var starvePct=100*starved/N;
   var cls2=function(p){return p>=60?'safe':(p>=15?'risky':'fatal');};
@@ -407,7 +416,7 @@ function render(acc,ends,used,atts,starved,N,cur,P){
 
   $('verdict').innerHTML=
    '<div class="v"><span>Your pile gets you to</span><b class="mono c-safe">Floor '+med+
-     '</b><small>median of '+N+' climbs from floor '+cur+'</small></div>'+
+     '</b><small>median of '+N+' climbs starting at floor '+(cur+1)+'</small></div>'+
    '<div class="v"><span>Food it costs</span><b class="mono">'+Math.round(avgUsed).toLocaleString()+
      '</b><small>'+P._name+', out of your '+P.pile.toLocaleString()+'</small></div>'+
    (ms?'<div class="v"><span>Reach f'+ms[0]+'</span><b class="mono c-'+cls2(msP)+'">'+msP.toFixed(0)+
