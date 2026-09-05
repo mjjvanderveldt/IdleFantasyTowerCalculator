@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Infinite Tower Ceiling Calculator</title>
+<style>
+:root{
+  --ground:#EFF1F3; --surface:#FFF; --raised:#F7F8FA; --sunk:#E8EBEF;
+  --ink:#171A1F; --ink2:#4B535F; --muted:#79818E;
+  --edge:#DCE0E6; --edge2:#C4CAD3;
+  --accent:#8A5E1C; --accent2:#6F4A14; --wash:#F5EDDF;
+  --safe:#2F6B47; --risky:#8A5E1C; --fatal:#A33529;
+  --focus:#2C6BB3;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --ground:#111318; --surface:#191C22; --raised:#1F232A; --sunk:#101216;
+  --ink:#E6E9EE; --ink2:#B0B8C3; --muted:#8B93A0;
+  --edge:#282D36; --edge2:#39404B;
+  --accent:#D6A24E; --accent2:#E9BE75; --wash:#282016;
+  --safe:#6DAF84; --risky:#D6A24E; --fatal:#E0796D;
+  --focus:#6EA6E6;
+}}
+:root[data-theme=dark]{
+  --ground:#111318; --surface:#191C22; --raised:#1F232A; --sunk:#101216;
+  --ink:#E6E9EE; --ink2:#B0B8C3; --muted:#8B93A0;
+  --edge:#282D36; --edge2:#39404B;
+  --accent:#D6A24E; --accent2:#E9BE75; --wash:#282016;
+  --safe:#6DAF84; --risky:#D6A24E; --fatal:#E0796D;
+  --focus:#6EA6E6;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--ground);color:var(--ink);
+  font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1220px;margin:0 auto;padding:22px 16px 64px}
+h1{font-size:clamp(21px,3.6vw,30px);line-height:1.1;letter-spacing:-.02em;margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--muted);font-size:13.5px;margin:0 0 20px;max-width:70ch}
+:where(button,select,input):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+.grid{display:grid;grid-template-columns:minmax(0,370px) minmax(0,1fr);gap:22px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+.panel{background:var(--surface);border:1px solid var(--edge);border-radius:8px}
+.panel>h2{
+  font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+  margin:0;padding:12px 14px;border-bottom:1px solid var(--edge);font-weight:600;
+}
+.pad{padding:14px}
+.stack{display:flex;flex-direction:column;gap:12px}
+
+.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+label{display:flex;flex-direction:column;gap:4px;min-width:0}
+label>span{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+input,select{
+  font:inherit;font-size:14px;color:var(--ink);background:var(--raised);
+  border:1px solid var(--edge2);border-radius:5px;padding:7px 9px;width:100%;min-width:0;
+}
+select{cursor:pointer}
+input[type=range]{padding:0;background:none;border:0;accent-color:var(--accent)}
+
+.slotgrid{display:flex;flex-direction:column;gap:7px}
+.slot{display:grid;grid-template-columns:62px minmax(0,1fr) 46px;gap:8px;align-items:center}
+.slot>b{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.slot select{font-size:13px;padding:6px 8px}
+.slot .d{font-size:12.5px;text-align:right;color:var(--ink2)}
+
+.totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:11px 14px;background:var(--sunk);border-top:1px solid var(--edge)}
+.tot{display:flex;flex-direction:column;gap:1px}
+.tot b{font-size:17px;font-weight:600;line-height:1.15}
+.tot span{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+.verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--edge);border:1px solid var(--edge);border-radius:8px;overflow:hidden;margin-bottom:16px}
+.v{background:var(--surface);padding:15px 16px;display:flex;flex-direction:column;gap:2px}
+.v b{font-size:31px;font-weight:600;line-height:1;letter-spacing:-.02em}
+.v span{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.v small{font-size:12px;color:var(--ink2);margin-top:3px}
+.c-safe{color:var(--safe)} .c-risky{color:var(--risky)} .c-fatal{color:var(--fatal)}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{
+  text-align:left;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  font-weight:600;padding:9px 10px;border-bottom:1px solid var(--edge);white-space:nowrap;
+}
+td{padding:8px 10px;border-bottom:1px solid var(--edge)}
+tbody tr:last-child td{border-bottom:0}
+th.num,td.num{text-align:right}
+.tw{overflow-x:auto}
+.bar{position:relative;height:7px;border-radius:4px;background:var(--sunk);overflow:hidden;min-width:70px}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:4px}
+i.b-safe{background:var(--safe)} i.b-risky{background:var(--risky)} i.b-fatal{background:var(--fatal)}
+tr.capped td{background:var(--wash)}
+
+.note{font-size:12.5px;color:var(--ink2);padding:11px 14px;border-top:1px solid var(--edge);background:var(--raised)}
+.note b{color:var(--ink)}
+.warn{border-left:3px solid var(--risky)}
+button.go{
+  font:inherit;font-size:14px;font-weight:600;color:#fff;background:var(--accent);
+  border:1px solid var(--accent);border-radius:6px;padding:10px 16px;cursor:pointer;width:100%;
+}
+:root[data-theme=dark] button.go{color:#17120A}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) button.go{color:#17120A}}
+button.go:disabled{opacity:.6;cursor:progress}
+.tiny{font-size:11.5px;color:var(--muted)}
+footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--edge);color:var(--muted);font-size:12px;max-width:78ch}
+code{font-family:ui-monospace,monospace;font-size:.88em;background:var(--raised);border:1px solid var(--edge);border-radius:3px;padding:.05em .3em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Infinite Tower Ceiling Calculator</h1>
+  <p class="sub">Runs the game's own combat resolution &mdash; ported tick-for-tick from
+  <code>CombatSimulator.kt</code> in Idle Fantasy 1.14.0 &mdash; over your gear and food, and reports
+  how high you clear. Every floor is 60 simulated minutes; only survival counts.</p>
+
+  <div class="grid">
+    <div class="stack">
+      <section class="panel">
+        <h2>Skills</h2>
+        <div class="pad stack">
+          <div class="row3">
+            <label><span>Attack</span><input type="number" id="atk" value="99" min="1" max="99"></label>
+            <label><span>Strength</span><input type="number" id="str" value="99" min="1" max="99"></label>
+            <label><span>Defence</span><input type="number" id="def" value="96" min="1" max="99"></label>
+          </div>
+          <div class="row">
+            <label><span>Hitpoints</span><input type="number" id="hp" value="94" min="10" max="99"></label>
+            <label><span>Tower HP milestones</span>
+              <select id="hpms">
+                <option value="0">None (below floor 60)</option>
+                <option value="5" selected>1 &mdash; floor 60 (+50 HP)</option>
+                <option value="10">2 &mdash; floor 160 (+100 HP)</option>
+                <option value="15">3 &mdash; floor 210 (+150 HP)</option>
+              </select>
+            </label>
+          </div>
+          <label><span>Extra Defence &mdash; blessing, potion, prestige</span><input type="number" id="xdef" value="0" min="0" max="200"></label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Equipment</h2>
+        <div class="pad">
+          <div class="slotgrid" id="slots"></div>
+        </div>
+        <div class="totals">
+          <div class="tot"><b class="mono" id="tDef">0</b><span>Def gear</span></div>
+          <div class="tot"><b class="mono" id="tAtk">0</b><span>Atk gear</span></div>
+          <div class="tot"><b class="mono" id="tStr">0</b><span>Str gear</span></div>
+        </div>
+        <div class="note" id="gearNote"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Food</h2>
+        <div class="pad stack">
+          <div class="row">
+            <label><span>Food</span><select id="food"></select></label>
+            <label><span>How many you bring</span><input type="number" id="qty" value="300" min="0" max="300"></label>
+          </div>
+          <label><span>Eat threshold &mdash; <b id="thrV" class="mono">50</b>% of max HP</span>
+            <input type="range" id="thr" min="10" max="90" step="5" value="50"></label>
+          <p class="tiny" style="margin:0">The game eats at most <b>300 items per floor</b>, so bringing more than 300 changes nothing.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Accuracy</h2>
+        <div class="pad stack">
+          <label><span>Runs per floor &mdash; higher is slower but steadier</span>
+            <select id="trials">
+              <option value="120">120 &mdash; fast</option>
+              <option value="300" selected>300 &mdash; balanced</option>
+              <option value="800">800 &mdash; precise</option>
+            </select></label>
+          <button class="go" id="run" type="button">Calculate my ceiling</button>
+        </div>
+      </section>
+    </div>
+
+    <div>
+      <div class="verdict" id="verdict"></div>
+      <section class="panel">
+        <h2>Clear rate by floor</h2>
+        <div class="tw"><table>
+          <thead><tr>
+            <th>Floor</th><th>Enemies</th><th class="num">Clear</th><th style="width:100px">&nbsp;</th>
+            <th class="num">Damage taken</th><th class="num">Food used</th>
+          </tr></thead>
+          <tbody id="rows"><tr><td colspan="6" style="color:var(--muted);padding:22px 10px">
+            Press <b>Calculate my ceiling</b>.</td></tr></tbody>
+        </table></div>
+        <div class="note" id="foodNote"></div>
+      </section>
+      <footer id="foot">
+        Safe means a 95%+ clear per attempt. That threshold is not arbitrary: a death drops you to the
+        checkpoint at <code>(best floor &divide; 25) &times; 25</code>, so banking a new checkpoint needs
+        <b>25 clears in a row</b>. At 95% that is a 28% chance per run of 25; at 70% it is 0.01%.
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script>
+var G = {"tiers":[[1,20,[["goblin",40],["skeleton",30],["zombie",30]]],[21,40,[["orc_warrior",40],["dark_wizard",30],["bandit",30]]],[41,60,[["cave_troll",35],["shadow_beast",35],["demon",30]]],[61,80,[["forge_demon",35],["shadow_assassin",35],["abyssal_leech",30]]],[81,100,[["void_stalker",35],["void_guardian",35],["abyssal_lord",30]]],[101,999999,[["void_archon",35],["eternal_sentinel",35],["abyssal_lord",30]]]],"enemies":{"abyssal_leech":{"n":"Abyssal Leech","hp":90,"al":20,"sl":18,"ab":38,"sb":35,"ad":30,"sd":28},"abyssal_lord":{"n":"Abyssal Lord","hp":350,"al":42,"sl":45,"ab":115,"sb":125,"ad":100,"sd":95},"bandit":{"n":"Bandit","hp":45,"al":7,"sl":6,"ab":10,"sb":9,"ad":12,"sd":12},"cave_troll":{"n":"Cave Troll","hp":55,"al":8,"sl":12,"ab":18,"sb":25,"ad":20,"sd":25},"dark_wizard":{"n":"Dark Wizard","hp":40,"al":8,"sl":7,"ab":12,"sb":11,"ad":8,"sd":8},"demon":{"n":"Lesser Demon","hp":110,"al":22,"sl":24,"ab":42,"sb":48,"ad":40,"sd":40},"eternal_sentinel":{"n":"Eternal Sentinel","hp":400,"al":38,"sl":40,"ab":105,"sb":115,"ad":130,"sd":120},"forge_demon":{"n":"Forge Demon","hp":105,"al":25,"sl":24,"ab":52,"sb":50,"ad":45,"sd":40},"goblin":{"n":"Goblin","hp":20,"al":2,"sl":2,"ab":2,"sb":2,"ad":5,"sd":5},"orc_warrior":{"n":"Orc Warrior","hp":65,"al":12,"sl":12,"ab":20,"sb":22,"ad":25,"sd":25},"shadow_assassin":{"n":"Shadow Assassin","hp":160,"al":24,"sl":26,"ab":58,"sb":65,"ad":42,"sd":38},"shadow_beast":{"n":"Shadow Beast","hp":115,"al":24,"sl":26,"ab":50,"sb":55,"ad":42,"sd":40},"skeleton":{"n":"Skeleton","hp":30,"al":4,"sl":3,"ab":5,"sb":4,"ad":8,"sd":8},"void_archon":{"n":"Void Archon","hp":320,"al":45,"sl":35,"ab":120,"sb":80,"ad":80,"sd":70},"void_guardian":{"n":"Void Guardian","hp":110,"al":24,"sl":22,"ab":50,"sb":48,"ad":55,"sd":50},"void_stalker":{"n":"Void Stalker","hp":200,"al":30,"sl":32,"ab":88,"sb":95,"ad":65,"sd":60},"zombie":{"n":"Zombie","hp":35,"al":5,"sl":5,"ab":6,"sb":7,"ad":6,"sd":6}},"gear":{"head":[{"k":"tower_helm","n":"Tower Helm","d":82,"a":0,"st":8,"rd":60,"ra":0,"rs":0},{"k":"sovereign_crown","n":"Sovereign Crown","d":80,"a":8,"st":5,"rd":85,"ra":0,"rs":0},{"k":"divine_helm","n":"Divine Helm","d":73,"a":0,"st":0,"rd":85,"ra":0,"rs":0},{"k":"dwarven_helm","n":"Dwarven Helm","d":58,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"gilded_full_helmet","n":"Gilded Full Helmet","d":48,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"runite_full_helmet","n":"Runite Full Helmet","d":45,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"slayer_helm","n":"Slayer Helm","d":40,"a":0,"st":0,"rd":45,"ra":0,"rs":0},{"k":"adamantite_full_helmet","n":"Adamantite Full Helmet","d":33,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"runite_med_helmet","n":"Runite Med Helmet","d":30,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"mithril_full_helmet","n":"Mithril Full Helmet","d":24,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"adamantite_med_helmet","n":"Adamantite Med Helmet","d":22,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"mithril_med_helmet","n":"Mithril Med Helmet","d":16,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"steel_full_helmet","n":"Steel Full Helmet","d":16,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"steel_med_helmet","n":"Steel Med Helmet","d":11,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"iron_full_helmet","n":"Iron Full Helmet","d":10,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"iron_med_helmet","n":"Iron Med Helmet","d":7,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"bronze_full_helmet","n":"Bronze Full Helmet","d":6,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"bronze_med_helmet","n":"Bronze Med Helmet","d":4,"a":0,"st":0,"rd":0,"ra":0,"rs":0}],"body":[{"k":"divine_platebody","n":"Divine Platebody","d":150,"a":0,"st":0,"rd":85,"ra":0,"rs":0},{"k":"balrog_wings","n":"Gothic Ember Wings","d":150,"a":10,"st":15,"rd":80,"ra":0,"rs":75},{"k":"tower_body","n":"Tower Plate","d":132,"a":0,"st":0,"rd":70,"ra":0,"rs":0},{"k":"dwarven_platebody","n":"Dwarven Platebody","d":120,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"gilded_platebody","n":"Gilded Platebody","d":95,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"runite_platebody","n":"Runite Platebody","d":90,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"slayer_platebody","n":"Slayer Platebody","d":80,"a":0,"st":0,"rd":45,"ra":0,"rs":0},{"k":"adamantite_platebody","n":"Adamantite Platebody","d":66,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"runite_chainbody","n":"Runite Chainbody","d":60,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"mithril_platebody","n":"Mithril Platebody","d":48,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"adamantite_chainbody","n":"Adamantite Chainbody","d":44,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"steel_platebody","n":"Steel Platebody","d":33,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"mithril_chainbody","n":"Mithril Chainbody","d":32,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"steel_chainbody","n":"Steel Chainbody","d":22,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"iron_platebody","n":"Iron Platebody","d":21,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"iron_chainbody","n":"Iron Chainbody","d":14,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"bronze_platebody","n":"Bronze Platebody","d":12,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"bronze_chainbody","n":"Bronze Chainbody","d":8,"a":0,"st":0,"rd":0,"ra":0,"rs":0}],"legs":[{"k":"divine_platelegs","n":"Divine Platelegs","d":138,"a":0,"st":0,"rd":85,"ra":0,"rs":0},{"k":"tower_legs","n":"Tower Greaves","d":125,"a":0,"st":0,"rd":70,"ra":0,"rs":0},{"k":"tower_plateskirt","n":"Tower Plateskirt","d":125,"a":0,"st":0,"rd":70,"ra":0,"rs":0},{"k":"dwarven_platelegs","n":"Dwarven Platelegs","d":110,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"runite_platelegs","n":"Runite Platelegs","d":75,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"runite_plateskirt","n":"Runite Plateskirt","d":75,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"slayer_platelegs","n":"Slayer Platelegs","d":65,"a":0,"st":0,"rd":45,"ra":0,"rs":0},{"k":"slayer_plateskirt","n":"Slayer Plateskirt","d":65,"a":0,"st":0,"rd":45,"ra":0,"rs":0},{"k":"adamantite_platelegs","n":"Adamantite Platelegs","d":55,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"adamantite_plateskirt","n":"Adamantite Plateskirt","d":55,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"mithril_platelegs","n":"Mithril Platelegs","d":40,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"mithril_plateskirt","n":"Mithril Plateskirt","d":40,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"steel_platelegs","n":"Steel Platelegs","d":28,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"steel_plateskirt","n":"Steel Plateskirt","d":28,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"iron_platelegs","n":"Iron Platelegs","d":18,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"iron_plateskirt","n":"Iron Plateskirt","d":18,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"bronze_platelegs","n":"Bronze Platelegs","d":10,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"bronze_plateskirt","n":"Bronze Plateskirt","d":10,"a":0,"st":0,"rd":0,"ra":0,"rs":0}],"boots":[{"k":"divine_boots","n":"Divine Boots","d":63,"a":0,"st":0,"rd":85,"ra":0,"rs":0},{"k":"tower_boots","n":"Tower Boots","d":58,"a":0,"st":0,"rd":70,"ra":0,"rs":0},{"k":"dragon_boots","n":"Dragon Boots","d":55,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"dwarven_boots","n":"Dwarven Boots","d":50,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"runite_boots","n":"Runite Boots","d":37,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"adamantite_boots","n":"Adamantite Boots","d":27,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"mithril_boots","n":"Mithril Boots","d":20,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"steel_boots","n":"Steel Boots","d":14,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"iron_boots","n":"Iron Boots","d":9,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"bronze_boots","n":"Bronze Boots","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0}],"cape":[{"k":"defense_cape","n":"Defense Cape","d":15,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"tower_cape","n":"Tower Cape","d":14,"a":14,"st":14,"rd":0,"ra":70,"rs":0},{"k":"gloomweave_cape","n":"Gloomweave Cape","d":8,"a":3,"st":3,"rd":0,"ra":0,"rs":0},{"k":"agility_cape","n":"Agility Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"agility_guild_cape","n":"Agility Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"archers_guild_cape","n":"Archers Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"attack_cape","n":"Attack Cape","d":5,"a":5,"st":0,"rd":0,"ra":0,"rs":0},{"k":"construction_guild_cape","n":"Builders Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"construction_cape","n":"Construction Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"cooking_cape","n":"Cooking Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"cooking_guild_cape","n":"Cooking Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"crafting_cape","n":"Crafting Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"crafting_guild_cape","n":"Crafting Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"farming_cape","n":"Farming Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"farming_guild_cape","n":"Farming Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"firemaking_cape","n":"Firemaking Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"firemaking_guild_cape","n":"Firemaking Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"fishing_cape","n":"Fishing Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"fishing_guild_cape","n":"Fishing Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"fletching_cape","n":"Fletching Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"fletching_guild_cape","n":"Fletching Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"hp_cape","n":"HP Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"herblore_cape","n":"Herblore Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"herblore_guild_cape","n":"Herblore Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"mages_guild_cape","n":"Mages Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"magic_cape","n":"Magic Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"mercantile_cape","n":"Mercantile Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"mercantile_guild_cape","n":"Merchants Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"mining_cape","n":"Mining Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"mining_guild_cape","n":"Mining Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"prayer_cape","n":"Prayer Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"prayer_guild_cape","n":"Prayer Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"ranged_cape","n":"Ranged Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"runecrafting_cape","n":"Runecrafting Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"runecrafting_guild_cape","n":"Runecrafting Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"slayer_cape","n":"Slayer Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"slayer_guild_cape","n":"Slayers Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"smithing_cape","n":"Smithing Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"smithing_guild_cape","n":"Smithing Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"strength_cape","n":"Strength Cape","d":5,"a":0,"st":5,"rd":0,"ra":0,"rs":0},{"k":"thieving_guild_cape","n":"Thieves Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"thieving_cape","n":"Thieving Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"warriors_guild_cape","n":"Warriors Guild Cape","d":5,"a":5,"st":5,"rd":0,"ra":0,"rs":0},{"k":"woodcutting_cape","n":"Woodcutting Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"woodcutting_guild_cape","n":"Woodcutting Guild Cape","d":5,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"carnival_cape","n":"Carnival Cape","d":3,"a":0,"st":0,"rd":0,"ra":0,"rs":0}],"ring":[{"k":"ring_of_suffering","n":"Ring of Suffering","d":18,"a":5,"st":2,"rd":70,"ra":0,"rs":0},{"k":"ring_of_flame","n":"Ring of Eternal Flame","d":12,"a":15,"st":18,"rd":70,"ra":75,"rs":0},{"k":"wraithbone_ring","n":"Wraithbone Ring","d":8,"a":8,"st":8,"rd":40,"ra":0,"rs":0},{"k":"platinum_diamond_ring","n":"Platinum Diamond Ring","d":7,"a":6,"st":5,"rd":0,"ra":0,"rs":0},{"k":"gold_diamond_ring","n":"Gold Diamond Ring","d":6,"a":5,"st":4,"rd":0,"ra":0,"rs":0},{"k":"ring_of_wealth","n":"Ring of Wealth","d":5,"a":4,"st":3,"rd":0,"ra":0,"rs":0},{"k":"shadow_signet","n":"Shadow Signet","d":5,"a":8,"st":14,"rd":0,"ra":50,"rs":0},{"k":"silver_diamond_ring","n":"Silver Diamond Ring","d":5,"a":3,"st":3,"rd":0,"ra":0,"rs":0},{"k":"platinum_emerald_ring","n":"Platinum Emerald Ring","d":4,"a":4,"st":0,"rd":0,"ra":0,"rs":0},{"k":"platinum_ruby_ring","n":"Platinum Ruby Ring","d":4,"a":10,"st":5,"rd":0,"ra":0,"rs":0},{"k":"platinum_sapphire_ring","n":"Platinum Sapphire Ring","d":4,"a":3,"st":0,"rd":0,"ra":0,"rs":0},{"k":"ring_of_recoil","n":"Ring of Recoil","d":4,"a":2,"st":2,"rd":0,"ra":0,"rs":0},{"k":"gold_emerald_ring","n":"Gold Emerald Ring","d":3,"a":3,"st":0,"rd":0,"ra":0,"rs":0},{"k":"gold_ruby_ring","n":"Gold Ruby Ring","d":3,"a":8,"st":4,"rd":0,"ra":0,"rs":0},{"k":"gold_sapphire_ring","n":"Gold Sapphire Ring","d":3,"a":2,"st":0,"rd":0,"ra":0,"rs":0},{"k":"kraken_tentacle","n":"Kraken Tentacle","d":3,"a":2,"st":0,"rd":0,"ra":0,"rs":0},{"k":"platinum_ring","n":"Platinum Ring","d":3,"a":3,"st":3,"rd":0,"ra":0,"rs":0},{"k":"ring_of_dragons_might","n":"Ring of Dragon's Might","d":3,"a":4,"st":16,"rd":0,"ra":0,"rs":70},{"k":"ring_of_the_seas","n":"Ring of the Seas","d":3,"a":2,"st":0,"rd":0,"ra":0,"rs":0},{"k":"archers_ring","n":"Archer's Ring","d":2,"a":2,"st":0,"rd":0,"ra":0,"rs":0},{"k":"gold_ring","n":"Gold Ring","d":2,"a":2,"st":2,"rd":0,"ra":0,"rs":0},{"k":"seers_ring","n":"Seers' Ring","d":2,"a":2,"st":0,"rd":0,"ra":0,"rs":0},{"k":"silver_emerald_ring","n":"Silver Emerald Ring","d":2,"a":2,"st":0,"rd":0,"ra":0,"rs":0},{"k":"silver_ruby_ring","n":"Silver Ruby Ring","d":2,"a":5,"st":3,"rd":0,"ra":0,"rs":0},{"k":"silver_sapphire_ring","n":"Silver Sapphire Ring","d":2,"a":1,"st":0,"rd":0,"ra":0,"rs":0},{"k":"berserker_ring","n":"Berserker Ring","d":1,"a":3,"st":10,"rd":0,"ra":0,"rs":60},{"k":"silver_ring","n":"Silver Ring","d":1,"a":1,"st":1,"rd":0,"ra":0,"rs":0},{"k":"strongmans_sigil","n":"Strongman's Sigil","d":0,"a":0,"st":8,"rd":0,"ra":0,"rs":30},{"k":"tower_ring","n":"Tower Ring","d":0,"a":6,"st":6,"rd":0,"ra":30,"rs":0}],"necklace":[{"k":"amulet_of_the_void","n":"Amulet of the Void","d":20,"a":24,"st":28,"rd":80,"ra":80,"rs":0},{"k":"flame_heart_amulet","n":"Flame Heart Amulet","d":15,"a":20,"st":25,"rd":0,"ra":75,"rs":0},{"k":"amulet_of_fury","n":"Amulet of Fury","d":12,"a":12,"st":12,"rd":50,"ra":60,"rs":0},{"k":"dragon_amulet","n":"Dragon Amulet","d":10,"a":14,"st":15,"rd":0,"ra":70,"rs":0},{"k":"platinum_diamond_necklace","n":"Platinum Diamond Necklace","d":10,"a":8,"st":6,"rd":0,"ra":0,"rs":0},{"k":"tower_amulet","n":"Tower Amulet","d":10,"a":15,"st":15,"rd":0,"ra":50,"rs":0},{"k":"gold_diamond_necklace","n":"Gold Diamond Necklace","d":8,"a":6,"st":5,"rd":0,"ra":0,"rs":0},{"k":"amulet_of_the_kraken","n":"Amulet of the Kraken","d":7,"a":4,"st":0,"rd":0,"ra":0,"rs":0},{"k":"silver_diamond_necklace","n":"Silver Diamond Necklace","d":7,"a":4,"st":4,"rd":0,"ra":0,"rs":0},{"k":"necklace_of_anguish","n":"Necklace of Anguish","d":5,"a":3,"st":0,"rd":0,"ra":0,"rs":0},{"k":"platinum_emerald_necklace","n":"Platinum Emerald Necklace","d":5,"a":5,"st":0,"rd":0,"ra":0,"rs":0},{"k":"platinum_ruby_necklace","n":"Platinum Ruby Necklace","d":5,"a":14,"st":6,"rd":0,"ra":0,"rs":0},{"k":"platinum_sapphire_necklace","n":"Platinum Sapphire Necklace","d":5,"a":4,"st":0,"rd":0,"ra":0,"rs":0},{"k":"tormented_necklace","n":"Tormented Necklace","d":5,"a":3,"st":0,"rd":0,"ra":0,"rs":0},{"k":"tricksters_amulet","n":"Trickster's Amulet","d":5,"a":5,"st":0,"rd":0,"ra":0,"rs":0},{"k":"gold_emerald_necklace","n":"Gold Emerald Necklace","d":4,"a":4,"st":0,"rd":0,"ra":0,"rs":0},{"k":"gold_ruby_necklace","n":"Gold Ruby Necklace","d":4,"a":11,"st":5,"rd":0,"ra":0,"rs":0},{"k":"gold_sapphire_necklace","n":"Gold Sapphire Necklace","d":4,"a":3,"st":0,"rd":0,"ra":0,"rs":0},{"k":"platinum_necklace","n":"Platinum Necklace","d":3,"a":4,"st":3,"rd":0,"ra":0,"rs":0},{"k":"silver_emerald_necklace","n":"Silver Emerald Necklace","d":3,"a":3,"st":0,"rd":0,"ra":0,"rs":0},{"k":"silver_ruby_necklace","n":"Silver Ruby Necklace","d":3,"a":6,"st":4,"rd":0,"ra":0,"rs":0},{"k":"silver_sapphire_necklace","n":"Silver Sapphire Necklace","d":3,"a":2,"st":0,"rd":0,"ra":0,"rs":0},{"k":"amulet_of_strength","n":"Amulet of Strength","d":2,"a":6,"st":10,"rd":0,"ra":0,"rs":0},{"k":"gold_necklace","n":"Gold Necklace","d":2,"a":3,"st":2,"rd":0,"ra":0,"rs":0},{"k":"silver_necklace","n":"Silver Necklace","d":1,"a":2,"st":1,"rd":0,"ra":0,"rs":0}],"shield":[{"k":"divine_shield","n":"Divine Shield","d":85,"a":0,"st":0,"rd":85,"ra":0,"rs":0},{"k":"tower_shield","n":"Tower Shield","d":80,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"gilded_kiteshield","n":"Gilded Kiteshield","d":71,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"dwarven_shield","n":"Dwarven Shield","d":68,"a":0,"st":0,"rd":60,"ra":0,"rs":0},{"k":"runite_kiteshield","n":"Runite Kiteshield","d":67,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"runite_square_shield","n":"Runite Square Shield","d":52,"a":0,"st":0,"rd":50,"ra":0,"rs":0},{"k":"adamantite_kiteshield","n":"Adamantite Kiteshield","d":49,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"adamantite_square_shield","n":"Adamantite Square Shield","d":38,"a":0,"st":0,"rd":40,"ra":0,"rs":0},{"k":"mithril_kiteshield","n":"Mithril Kiteshield","d":36,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"mithril_square_shield","n":"Mithril Square Shield","d":28,"a":0,"st":0,"rd":30,"ra":0,"rs":0},{"k":"steel_kiteshield","n":"Steel Kiteshield","d":25,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"steel_square_shield","n":"Steel Square Shield","d":19,"a":0,"st":0,"rd":20,"ra":0,"rs":0},{"k":"iron_kiteshield","n":"Iron Kiteshield","d":16,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"iron_square_shield","n":"Iron Square Shield","d":12,"a":0,"st":0,"rd":10,"ra":0,"rs":0},{"k":"bronze_kiteshield","n":"Bronze Kiteshield","d":9,"a":0,"st":0,"rd":0,"ra":0,"rs":0},{"k":"bronze_square_shield","n":"Bronze Square Shield","d":7,"a":0,"st":0,"rd":0,"ra":0,"rs":0}]},"weapons":[{"k":"void_reaver","n":"Void Reaver","d":0,"a":120,"st":130,"rd":0,"ra":90,"rs":90,"th":0,"sp":2.4,"cs":"strength"},{"k":"balrog_whip","n":"Gothic Ember's Flaming Whip","d":0,"a":85,"st":95,"rd":0,"ra":80,"rs":80,"th":0,"sp":2.4,"cs":"attack"},{"k":"divine_greatblade","n":"Divine Greatblade","d":0,"a":70,"st":88,"rd":0,"ra":0,"rs":85,"th":0,"sp":2.4,"cs":"strength"},{"k":"runite_2h_sword","n":"Runite 2H Sword","d":0,"a":75,"st":75,"rd":0,"ra":50,"rs":0,"th":1,"sp":2.4,"cs":"attack"},{"k":"divine_sword","n":"Divine Sword","d":0,"a":82,"st":65,"rd":0,"ra":85,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"tower_sword","n":"Tower Sword","d":0,"a":72,"st":75,"rd":0,"ra":70,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"abyssal_whip","n":"Abyssal Whip","d":0,"a":60,"st":80,"rd":0,"ra":0,"rs":50,"th":0,"sp":2.4,"cs":"strength"},{"k":"reaper_scythe","n":"Reaper's Scythe","d":0,"a":58,"st":75,"rd":0,"ra":0,"rs":55,"th":0,"sp":2.4,"cs":"strength"},{"k":"dwarven_warhammer","n":"Dwarven Warhammer","d":0,"a":55,"st":70,"rd":0,"ra":0,"rs":60,"th":0,"sp":2.4,"cs":"strength"},{"k":"runite_battleaxe","n":"Runite Battleaxe","d":0,"a":60,"st":60,"rd":0,"ra":0,"rs":50,"th":0,"sp":2.4,"cs":"strength"},{"k":"runite_warhammer","n":"Runite Warhammer","d":0,"a":52,"st":67,"rd":0,"ra":0,"rs":50,"th":0,"sp":2.4,"cs":"strength"},{"k":"dragon_longsword","n":"Dragon Longsword","d":0,"a":68,"st":50,"rd":0,"ra":60,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"dwarven_scimitar","n":"Dwarven Scimitar","d":0,"a":60,"st":58,"rd":0,"ra":60,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"dwarven_sword","n":"Dwarven Sword","d":0,"a":65,"st":52,"rd":0,"ra":60,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"dragon_scimitar","n":"Dragon Scimitar","d":0,"a":47,"st":65,"rd":0,"ra":60,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"adamantite_2h_sword","n":"Adamantite 2H Sword","d":0,"a":55,"st":55,"rd":0,"ra":40,"rs":0,"th":1,"sp":2.4,"cs":"attack"},{"k":"runite_longsword","n":"Runite Longsword","d":0,"a":60,"st":45,"rd":0,"ra":50,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"runite_scimitar","n":"Runite Scimitar","d":0,"a":37,"st":52,"rd":0,"ra":50,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"adamantite_battleaxe","n":"Adamantite Battleaxe","d":0,"a":44,"st":44,"rd":0,"ra":0,"rs":40,"th":0,"sp":2.4,"cs":"strength"},{"k":"adamantite_warhammer","n":"Adamantite Warhammer","d":0,"a":38,"st":49,"rd":0,"ra":0,"rs":40,"th":0,"sp":2.4,"cs":"strength"},{"k":"runite_sword","n":"Runite Sword","d":0,"a":45,"st":37,"rd":0,"ra":50,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"mithril_2h_sword","n":"Mithril 2H Sword","d":0,"a":40,"st":40,"rd":0,"ra":30,"rs":0,"th":1,"sp":2.4,"cs":"attack"},{"k":"adamantite_longsword","n":"Adamantite Longsword","d":0,"a":44,"st":33,"rd":0,"ra":40,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"runite_dagger","n":"Runite Dagger","d":0,"a":37,"st":30,"rd":0,"ra":50,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"adamantite_scimitar","n":"Adamantite Scimitar","d":0,"a":27,"st":38,"rd":0,"ra":40,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"mithril_battleaxe","n":"Mithril Battleaxe","d":0,"a":32,"st":32,"rd":0,"ra":0,"rs":30,"th":0,"sp":2.4,"cs":"strength"},{"k":"mithril_warhammer","n":"Mithril Warhammer","d":0,"a":28,"st":36,"rd":0,"ra":0,"rs":30,"th":0,"sp":2.4,"cs":"strength"},{"k":"adamantite_sword","n":"Adamantite Sword","d":0,"a":33,"st":27,"rd":0,"ra":40,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"mithril_longsword","n":"Mithril Longsword","d":0,"a":32,"st":24,"rd":0,"ra":30,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"steel_2h_sword","n":"Steel 2H Sword","d":0,"a":28,"st":28,"rd":0,"ra":20,"rs":0,"th":1,"sp":2.4,"cs":"attack"},{"k":"adamantite_dagger","n":"Adamantite Dagger","d":0,"a":27,"st":22,"rd":0,"ra":40,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"mithril_scimitar","n":"Mithril Scimitar","d":0,"a":20,"st":28,"rd":0,"ra":30,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"mithril_sword","n":"Mithril Sword","d":0,"a":24,"st":20,"rd":0,"ra":30,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"steel_battleaxe","n":"Steel Battleaxe","d":0,"a":22,"st":22,"rd":0,"ra":0,"rs":20,"th":0,"sp":2.4,"cs":"strength"},{"k":"steel_warhammer","n":"Steel Warhammer","d":0,"a":19,"st":25,"rd":0,"ra":0,"rs":20,"th":0,"sp":2.4,"cs":"strength"},{"k":"shadow_dagger","n":"Shadow Dagger","d":0,"a":16,"st":24,"rd":0,"ra":15,"rs":0,"th":0,"sp":2.4,"cs":"strength"},{"k":"steel_longsword","n":"Steel Longsword","d":0,"a":22,"st":16,"rd":0,"ra":20,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"iron_2h_sword","n":"Iron 2H Sword","d":0,"a":18,"st":18,"rd":0,"ra":10,"rs":0,"th":1,"sp":2.4,"cs":"attack"},{"k":"mithril_dagger","n":"Mithril Dagger","d":0,"a":20,"st":16,"rd":0,"ra":30,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"steel_scimitar","n":"Steel Scimitar","d":0,"a":14,"st":19,"rd":0,"ra":20,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"steel_sword","n":"Steel Sword","d":0,"a":16,"st":14,"rd":0,"ra":20,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"iron_battleaxe","n":"Iron Battleaxe","d":0,"a":14,"st":14,"rd":0,"ra":0,"rs":10,"th":0,"sp":2.4,"cs":"strength"},{"k":"iron_warhammer","n":"Iron Warhammer","d":0,"a":12,"st":16,"rd":0,"ra":0,"rs":10,"th":0,"sp":2.4,"cs":"strength"},{"k":"steel_dagger","n":"Steel Dagger","d":0,"a":14,"st":11,"rd":0,"ra":20,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"iron_longsword","n":"Iron Longsword","d":0,"a":14,"st":10,"rd":0,"ra":10,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"iron_scimitar","n":"Iron Scimitar","d":0,"a":9,"st":12,"rd":0,"ra":10,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"bronze_2h_sword","n":"Bronze 2H Sword","d":0,"a":10,"st":10,"rd":0,"ra":0,"rs":0,"th":1,"sp":2.4,"cs":"attack"},{"k":"iron_sword","n":"Iron Sword","d":0,"a":10,"st":9,"rd":0,"ra":10,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"bronze_battleaxe","n":"Bronze Battleaxe","d":0,"a":8,"st":8,"rd":0,"ra":0,"rs":0,"th":0,"sp":2.4,"cs":"strength"},{"k":"bronze_warhammer","n":"Bronze Warhammer","d":0,"a":7,"st":9,"rd":0,"ra":0,"rs":0,"th":0,"sp":2.4,"cs":"strength"},{"k":"iron_dagger","n":"Iron Dagger","d":0,"a":9,"st":7,"rd":0,"ra":10,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"bronze_longsword","n":"Bronze Longsword","d":0,"a":8,"st":6,"rd":0,"ra":0,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"bronze_scimitar","n":"Bronze Scimitar","d":0,"a":5,"st":7,"rd":0,"ra":0,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"bronze_sword","n":"Bronze Sword","d":0,"a":6,"st":5,"rd":0,"ra":0,"rs":0,"th":0,"sp":2.4,"cs":"attack"},{"k":"bronze_dagger","n":"Bronze Dagger","d":0,"a":5,"st":4,"rd":0,"ra":0,"rs":0,"th":0,"sp":2.4,"cs":"attack"}],"food":[{"k":"manta_ray","n":"Manta Ray","h":22},{"k":"sea_turtle","n":"Sea Turtle","h":21},{"k":"shark","n":"Shark","h":20},{"k":"monkfish","n":"Monkfish","h":16},{"k":"swordfish","n":"Swordfish","h":14},{"k":"lobster","n":"Lobster","h":12},{"k":"tuna","n":"Tuna","h":10},{"k":"salmon","n":"Salmon","h":9},{"k":"cooked_beef","n":"Cooked Beef","h":8}]};
+
+/* ---- simulation: ported from CombatSimulator.simulateDungeon (melee/attack style) ---- */
+var BASE_SPEED = 2.4;
+function tierFor(f){ for(var i=0;i<G.tiers.length;i++){ if(f>=G.tiers[i][0]&&f<=G.tiers[i][1]) return G.tiers[i][2]; } return G.tiers[G.tiers.length-1][2]; }
+function prog(f){ return f<=100 ? 0 : (Math.min(Math.max(f,101),250)-100)/150; }
+function scaled(k,f){
+  var e=G.enemies[k];
+  if(f<=100) return {hp:e.hp,al:e.al,sl:e.sl,ab:e.ab,sb:e.sb,ad:e.ad};
+  var p=prog(f), hm=1+p*9, sm=1+p*0.3;
+  return {hp:Math.max(1,Math.trunc(e.hp*hm)),al:e.al,sl:e.sl,
+          ab:Math.trunc(e.ab*sm),sb:Math.trunc(e.sb*sm),ad:Math.trunc(e.ad*sm)};
+}
+function clamp(x,lo,hi){ return x<lo?lo:(x>hi?hi:x); }
+function ri(n){ return (Math.random()*(n+1))|0; }   /* uniform 0..n inclusive */
+
+function simFloor(f,P){
+  var ticks=Math.round(60/P.speed), maxHp=P.maxHp, hp=maxHp, thr=P.thr;
+  var pool=[], sp=tierFor(f);
+  for(var i=0;i<sp.length;i++) for(var w=0;w<sp[i][1];w++) pool.push(sp[i][0]);
+  var pmax=Math.max(1,1+Math.trunc(P.effStr*(P.strBonus+64)/640));
+  var peff=P.effAtk, eaten=0, food=P.food, heal=P.heal;
+  var carry=null, carryHp=0, clock=0, dmg=0, kills=0;
+  for(var m=0;m<60;m++){
+    var key = carry || pool[(Math.random()*pool.length)|0]; carry=null;
+    var e=scaled(key,f);
+    var ph = peff>e.ad ? 1-e.ad/(2*Math.max(peff,1)) : peff/(2*Math.max(e.ad,1));
+    ph = clamp(ph,0.15,0.95);
+    var eStr=e.sl+e.sb;
+    var emax = eStr===0?0:Math.max(0,1+Math.trunc(eStr*(e.sb+64)/640));
+    var eatk=e.al+e.ab;
+    var eh = eatk>P.effDef ? 1-P.effDef/(2*Math.max(eatk,1)) : eatk/(2*Math.max(P.effDef,1));
+    eh = clamp(eh,0.10,0.95);
+    var ehp = carryHp>0?carryHp:e.hp; carryHp=0; var k=0;
+    for(var t=0;t<ticks;t++){
+      if(Math.random()<ph) ehp-=ri(pmax);
+      if(ehp<=0){ k++; kills++; ehp=e.hp; }
+      clock+=P.speed; var ed=0;
+      while(clock>=BASE_SPEED-1e-9){ clock-=BASE_SPEED; if(Math.random()<eh) ed+=ri(emax); }
+      hp-=ed; dmg+=ed;
+      if(hp<=0) return {died:1,eaten:eaten,dmg:dmg,kills:kills};
+      while(eaten<300 && food>0 && (hp<=emax || hp<=maxHp*thr)){
+        hp=Math.min(maxHp,hp+heal); food--; eaten++;
+      }
+    }
+    var fresh = k>0 && ehp===e.hp;
+    if(ehp>0 && !fresh){ carry=key; carryHp=ehp; }
+  }
+  return {died:0,eaten:eaten,dmg:dmg,kills:kills};
+}
+function rateAt(f,P,n){
+  var d=0,dmg=0,fd=0,cap=0;
+  for(var i=0;i<n;i++){ var r=simFloor(f,P); d+=r.died; dmg+=r.dmg; fd+=r.eaten; if(r.eaten>=300) cap++; }
+  return {floor:f,clear:100*(1-d/n),dmg:dmg/n,food:fd/n,capped:cap/n>0.15};
+}
+
+/* ---- inputs ---- */
+var SLOTS=[["head","Head"],["body","Body"],["legs","Legs"],["boots","Boots"],
+           ["cape","Cape"],["ring","Ring"],["necklace","Neck"],["shield","Shield"]];
+var $=function(id){return document.getElementById(id);};
+
+function opt(v,t,sel){ return '<option value="'+v+'"'+(sel?' selected':'')+'>'+t+'</option>'; }
+(function build(){
+  var h='';
+  h+='<div class="slot"><b>Weapon</b><select id="s_weapon">'+
+     G.weapons.map(function(w,i){return opt(i,w.n+' ('+w.a+'/'+w.st+')',w.k==='runite_scimitar');}).join('')+
+     '</select><span class="d mono" id="d_weapon">0</span></div>';
+  SLOTS.forEach(function(s){
+    var list=G.gear[s[0]]||[];
+    var def={head:'adamantite_full_helmet',body:'adamantite_platebody',legs:'adamantite_platelegs',
+             boots:'dragon_boots',cape:'attack_cape',ring:'tower_ring',necklace:'tower_amulet',shield:'tower_shield'}[s[0]];
+    h+='<div class="slot"><b>'+s[1]+'</b><select id="s_'+s[0]+'">'+opt(-1,'— empty —',false)+
+       list.map(function(g,i){return opt(i,g.n+' ('+g.d+')',g.k===def);}).join('')+
+       '</select><span class="d mono" id="d_'+s[0]+'">0</span></div>';
+  });
+  $('slots').innerHTML=h;
+  $('food').innerHTML=G.food.map(function(f){return opt(f.h,f.n+' — heals '+f.h,f.k==='manta_ray');}).join('');
+})();
+
+function readGear(){
+  var w=G.weapons[+$('s_weapon').value]||{a:0,st:0,d:0,th:0,sp:2.4,n:'',rd:0,ra:0,rs:0};
+  var D=w.d||0,A=w.a||0,S=w.st||0, locked=[], twoH=!!w.th;
+  $('d_weapon').textContent=(w.d||0);
+  SLOTS.forEach(function(s){
+    var i=+$('s_'+s[0]).value, g=(G.gear[s[0]]||[])[i];
+    var skip = twoH && s[0]==='shield';
+    var cell=$('d_'+s[0]);
+    if(!g||i<0){ cell.textContent='–'; return; }
+    if(skip){ cell.textContent='✕'; return; }
+    D+=g.d; A+=g.a; S+=g.st;
+    var dl=+$('def').value, al=+$('atk').value, sl=+$('str').value;
+    if(g.rd>dl||g.ra>al||g.rs>sl) locked.push(g.n);
+    cell.textContent=g.d;
+  });
+  if(w.rd>+$('def').value||w.ra>+$('atk').value) locked.push(w.n);
+  return {D:D,A:A,S:S,twoH:twoH,speed:w.sp||2.4,locked:locked};
+}
+function refresh(){
+  var g=readGear();
+  $('tDef').textContent=g.D; $('tAtk').textContent=g.A; $('tStr').textContent=g.S;
+  var n=[];
+  if(g.twoH) n.push('<b>Two-handed weapon:</b> the shield slot is ignored, per <code>PlayerRepository</code>.');
+  if(g.locked.length) n.push('<b>Cannot equip:</b> '+g.locked.join(', ')+' — your levels are too low.');
+  var ed=(+$('def').value)+g.D+(+$('xdef').value);
+  n.push('Effective Defence <b>'+ed+'</b>. Enemy hit chance floors at 10%, so Defence stops helping once you pass <b>5&times; a tier’s attack</b>.');
+  $('gearNote').innerHTML=n.join('<br>');
+  $('thrV').textContent=$('thr').value;
+}
+['def','atk','str','xdef','thr'].forEach(function(id){$(id).addEventListener('input',refresh);});
+document.addEventListener('change',function(e){ if(e.target.tagName==='SELECT'||e.target.tagName==='INPUT') refresh(); });
+
+function params(){
+  var g=readGear();
+  return {
+    effDef:(+$('def').value)+g.D+(+$('xdef').value),
+    effAtk:(+$('atk').value)+g.A,
+    effStr:(+$('str').value)+g.S,
+    strBonus:g.S, speed:g.speed,
+    maxHp:((+$('hp').value)+(+$('hpms').value))*10,
+    thr:(+$('thr').value)/100,
+    food:Math.min(300,+$('qty').value), heal:+$('food').value,
+    _name:$('food').options[$('food').selectedIndex].text.split(' — ')[0]
+  };
+}
+function cls(p){ return p>=95?'safe':(p>=50?'risky':'fatal'); }
+
+function run(){
+  var P=params(), n=+$('trials').value, btn=$('run');
+  btn.disabled=true; btn.textContent='Simulating…';
+  setTimeout(function(){
+    var floors=[], f;
+    for(f=10;f<=100;f+=10) floors.push(f);
+    for(f=110;f<=250;f+=10) floors.push(f);
+    var res=[], safe=0, surv=0;
+    for(var i=0;i<floors.length;i++){
+      var r=rateAt(floors[i],P,n);
+      res.push(r);
+      if(r.clear>=95) safe=floors[i];
+      if(r.clear>=50) surv=floors[i];
+      if(r.clear<3 && floors[i]>20) break;
+    }
+    /* refine the 95% boundary to the nearest floor */
+    if(safe>0 && safe<250){
+      for(f=safe+1; f<=Math.min(250,safe+10); f++){
+        if(rateAt(f,P,n).clear>=95) safe=f; else break;
+      }
+    }
+    if(surv>0 && surv<250){
+      for(f=surv+1; f<=Math.min(250,surv+10); f++){
+        if(rateAt(f,P,n).clear>=50) surv=f; else break;
+      }
+    }
+    render(res,safe,surv,P);
+    btn.disabled=false; btn.textContent='Calculate my ceiling';
+  },20);
+}
+$('run').addEventListener('click',run);
+
+function render(res,safe,surv,P){
+  var names=function(f){ return tierFor(f).map(function(s){return G.enemies[s[0]].n;}).join(', '); };
+  var near=null;
+  for(var i=0;i<res.length;i++){ if(res[i].floor<=safe) near=res[i]; }
+  var perFloor = near?Math.round(near.food):0;
+  var bank = safe>0 ? Math.floor(safe/25)*25+25 : 25;
+
+  $('verdict').innerHTML =
+    '<div class="v"><span>Safe ceiling &mdash; 95%+</span><b class="mono c-'+(safe?'safe':'fatal')+'">'+
+      (safe?('Floor '+safe):'None')+'</b><small>'+(safe?'You can grind here and expect to bank checkpoints.':'Not even floor 10 is safe with this setup.')+'</small></div>'+
+    '<div class="v"><span>Coin-flip &mdash; 50%+</span><b class="mono c-risky">'+(surv?('Floor '+surv):'None')+
+      '</b><small>Good for pushing your best-floor record, not for banking.</small></div>'+
+    '<div class="v"><span>Food per safe floor</span><b class="mono">'+perFloor+'</b><small>'+P._name+
+      ', out of the 300 cap</small></div>'+
+    '<div class="v"><span>To bank floor '+bank+'</span><b class="mono">'+(perFloor*25).toLocaleString()+
+      '</b><small>25 clears in a row &mdash; that is the real cost</small></div>';
+
+  $('rows').innerHTML = res.map(function(r){
+    var c=cls(r.clear);
+    return '<tr'+(r.capped?' class="capped"':'')+'><td class="mono">'+r.floor+'</td>'+
+      '<td style="color:var(--ink2);font-size:12.5px">'+names(r.floor)+'</td>'+
+      '<td class="num mono c-'+c+'"><b>'+r.clear.toFixed(1)+'%</b></td>'+
+      '<td><div class="bar"><i class="b-'+c+'" style="width:'+Math.max(2,r.clear)+'%"></i></div></td>'+
+      '<td class="num mono">'+Math.round(r.dmg).toLocaleString()+'</td>'+
+      '<td class="num mono">'+Math.round(r.food)+(r.capped?' ⚠':'')+'</td></tr>';
+  }).join('');
+
+  var caps=res.filter(function(r){return r.capped;});
+  var msg='<b>Reading this:</b> damage taken is what the hour throws at you; food used is how much of your '+
+          P.food+'-item stock it eats. Your own HP bar absorbs the first '+Math.round(P.maxHp*P.thr)+
+          ' free, which is why low floors cost nothing.';
+  if(caps.length) msg+='<br><b class="c-risky">⚠ Highlighted floors hit the 300-item cap.</b> There, food is '+
+          'the wall, not Defence — more armour helps, more fish cannot.';
+  $('foodNote').className='note'+(caps.length?' warn':'');
+  $('foodNote').innerHTML=msg;
+}
+refresh(); run();
+</script>
+</body>
+</html>
