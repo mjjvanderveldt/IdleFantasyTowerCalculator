@@ -31,9 +31,13 @@ Enemy, equipment and food values are read from the game's own JSON assets (v1.14
 effective Defence passes **5× a tier's effective attack**, more armour changes nothing at
 all. For floors 61–80 that ceiling is 410.
 
-**Food is usually the real wall.** Below the f81-100 tier a floor costs you almost nothing;
-at floor 82 the damage jumps roughly sixfold. The calculator flags every floor where the
-300-item cap binds — on those, more armour helps and more fish cannot.
+**Food is usually the real wall, until suddenly it isn't.** You tell it the size of your whole
+stockpile, not a per-floor load: every floor draws up to 300 items from the pile and the pile
+carries across floors until it runs dry. That produces a sharp saturation point. On one test
+character, 300 Shark reaches floor 80 and 3,000 reaches floor 88 — but 10,000 and 30,000 both
+stop at 89, because beyond a certain pile every floor already loads a full 300 and the extra
+fish are dead weight. Past that point armour is the only thing that moves the ceiling, and the
+tool tells you which side of the line you are on.
 
 Melee only (Attack/Strength style). Ranged and magic use different accuracy stats and
 aren't ported.

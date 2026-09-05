@@ -163,11 +163,13 @@ code{font-family:ui-monospace,monospace;font-size:.88em;background:var(--raised)
         <div class="pad stack">
           <div class="row">
             <label><span>Food</span><select id="food"></select></label>
-            <label><span>How many you bring</span><input type="number" id="qty" value="300" min="0" max="300"></label>
+            <label><span>How many you own &mdash; the whole pile</span><input type="number" id="qty" value="3000" min="0" max="999999"></label>
           </div>
           <label><span>Eat threshold &mdash; <b id="thrV" class="mono">50</b>% of max HP</span>
             <input type="range" id="thr" min="10" max="90" step="5" value="50"></label>
-          <p class="tiny" style="margin:0">The game eats at most <b>300 items per floor</b>, so bringing more than 300 changes nothing.</p>
+          <label><span>Minutes per session &mdash; 60 at Agility 1, 40 at Agility 99</span>
+            <input type="number" id="mins" value="50" min="15" max="60"></label>
+          <p class="tiny" style="margin:0">Each floor draws up to <b>300</b> from the pile &mdash; the cap is per floor, not per climb. The pile carries across floors until it runs dry, and that is usually what ends the run.</p>
         </div>
       </section>
 
@@ -176,11 +178,11 @@ code{font-family:ui-monospace,monospace;font-size:.88em;background:var(--raised)
         <div class="pad stack">
           <label><span>Highest floor you have cleared</span><input type="number" id="cur" value="74" min="0" max="249"></label>
           <p class="tiny" id="curNote" style="margin:0"></p>
-          <label><span>Simulated attempts per floor &mdash; this tool's accuracy, not a game setting</span>
+          <label><span>Simulated climbs &mdash; this tool's accuracy, not a game setting</span>
             <select id="trials">
-              <option value="80">80 &mdash; fast</option>
-              <option value="200" selected>200 &mdash; balanced</option>
-              <option value="500">500 &mdash; precise</option>
+              <option value="40">40 &mdash; fast</option>
+              <option value="100" selected>100 &mdash; balanced</option>
+              <option value="250">250 &mdash; precise</option>
             </select></label>
           <button class="go" id="run" type="button">Simulate my climb</button>
           <div class="bar" id="prog" hidden><i class="b-safe" style="width:0"></i></div>
@@ -230,12 +232,12 @@ function scaled(k,f){
 function clamp(x,lo,hi){ return x<lo?lo:(x>hi?hi:x); }
 function ri(n){ return (Math.random()*(n+1))|0; }   /* uniform 0..n inclusive */
 
-function simFloor(f,P){
+function simFloor(f,P,foodQty){
   var ticks=Math.round(60/P.speed), maxHp=P.maxHp, hp=maxHp, thr=P.thr;
   var pool=[], sp=tierFor(f);
   for(var i=0;i<sp.length;i++) for(var w=0;w<sp[i][1];w++) pool.push(sp[i][0]);
   var pmax=Math.max(1,1+Math.trunc(P.effStr*(P.strBonus+64)/640));
-  var peff=P.effAtk, eaten=0, food=P.food, heal=P.heal;
+  var peff=P.effAtk, eaten=0, food=foodQty, heal=P.heal;
   var carry=null, carryHp=0, clock=0, dmg=0, kills=0;
   for(var m=0;m<60;m++){
     var key = carry || pool[(Math.random()*pool.length)|0]; carry=null;
@@ -264,10 +266,20 @@ function simFloor(f,P){
   }
   return {died:0,eaten:eaten,dmg:dmg,kills:kills};
 }
-function rateAt(f,P,n){
-  var d=0,dmg=0,fd=0,cap=0;
-  for(var i=0;i<n;i++){ var r=simFloor(f,P); d+=r.died; dmg+=r.dmg; fd+=r.eaten; if(r.eaten>=300) cap++; }
-  return {floor:f,clear:100*(1-d/n),dmg:dmg/n,food:fd/n,capped:cap/n>0.15};
+/* one whole run: climb from start+1 upward, drawing up to 300 per floor from the pile */
+function simClimb(start,P,acc){
+  var pile=P.pile, f=start+1, used=0, bring;
+  while(f<=250){
+    bring=Math.min(300,pile);
+    if(bring<=0) return {end:f-1,used:used,starved:true,attempts:f-start-1};
+    var r=simFloor(f,P,bring);
+    used+=r.eaten; pile-=r.eaten;
+    if(acc){ var a=acc[f]||(acc[f]={reach:0,clear:0,food:0,dmg:0,short:0});
+             a.reach++; a.food+=r.eaten; a.dmg+=r.dmg; if(bring<300) a.short++; if(!r.died) a.clear++; }
+    if(r.died) return {end:f-1,used:used,starved:bring<300,attempts:f-start};
+    f++;
+  }
+  return {end:250,used:used,starved:false,attempts:250-start};
 }
 
 /* ---- inputs ---- */
@@ -290,7 +302,7 @@ function opt(v,t,sel){ return '<option value="'+v+'"'+(sel?' selected':'')+'>'+t
        '</select><span class="d mono" id="d_'+s[0]+'">0</span></div>';
   });
   $('slots').innerHTML=h;
-  $('food').innerHTML=G.food.map(function(f){return opt(f.h,f.n+' — heals '+f.h,f.k==='manta_ray');}).join('');
+  $('food').innerHTML=G.food.map(function(f){return opt(f.h,f.n+' — heals '+f.h,f.k==='shark');}).join('');
 })();
 
 function readGear(){
@@ -334,7 +346,7 @@ function params(){
     strBonus:g.S, speed:g.speed,
     maxHp:((+$('hp').value)+(+$('hpms').value))*10,
     thr:(+$('thr').value)/100,
-    food:Math.min(300,+$('qty').value), heal:+$('food').value,
+    pile:+$('qty').value, heal:+$('food').value, mins:+$('mins').value,
     _name:$('food').options[$('food').selectedIndex].text.split(' — ')[0]
   };
 }
@@ -350,76 +362,81 @@ var MS=[[10,"Tower Ring"],[20,"+1% tower XP"],[30,"5,000 coins"],[40,"Tower Shie
 function curNote(){
   var c=+$('cur').value, cp=Math.floor(c/25)*25;
   $('curNote').innerHTML='Next attempt is <b>floor '+(c+1)+'</b> — you never pick. Die anywhere and you '+
-    'restart from <b>floor '+(cp+1)+'</b> (checkpoint '+cp+'); your best floor of '+c+' is kept.';
+    'restart from <b>floor '+(cp+1)+'</b> (checkpoint '+cp+'); your best floor of '+c+' is kept.'+
+    (c%25===24?' <b class="c-risky">One more clear moves your checkpoint to '+(c+1)+'.</b>':'');
 }
 $('cur').addEventListener('input',curNote);
 
+function pct(a,b){ return b>0?100*a/b:0; }
+function median(a){ var s=a.slice().sort(function(x,y){return x-y;}); return s[(s.length/2)|0]; }
+
 function run(){
-  var P=params(), n=+$('trials').value, cur=+$('cur').value, btn=$('run'), prog=$('prog');
+  var P=params(), N=+$('trials').value, cur=+$('cur').value, btn=$('run'), prog=$('prog');
   btn.disabled=true; btn.textContent='Simulating…'; prog.hidden=false;
-  var bar=prog.querySelector('i');
-  var res=[], f=cur+1, reach=1, expFloors=0, foodRun=0;
+  var bar=prog.querySelector('i'), acc={}, ends=[], used=[], starved=0, atts=[], done=0;
   function step(){
-    var budget=4;
-    while(budget-->0 && f<=250){
-      var r=rateAt(f,P,n);
-      r.reach=reach;                    /* chance of arriving at this floor at all */
-      foodRun += r.food*reach;
-      reach *= r.clear/100;
-      r.after=reach;                    /* chance of clearing it too */
-      expFloors += reach;
-      res.push(r); f++;
-      if(reach<0.005) break;
+    var budget=Math.max(1,Math.round(N/25));
+    while(budget-->0 && done<N){
+      var r=simClimb(cur,P,acc);
+      ends.push(r.end); used.push(r.used); atts.push(r.attempts);
+      if(r.starved) starved++;
+      done++;
     }
-    bar.style.width=Math.min(100,Math.max(4,100*(1-reach)))+'%';
-    if(f<=250 && reach>=0.005){ setTimeout(step,0); }
-    else { prog.hidden=true; render(res,cur,expFloors,foodRun,P);
+    bar.style.width=(100*done/N)+'%';
+    if(done<N) setTimeout(step,0);
+    else { prog.hidden=true; render(acc,ends,used,atts,starved,N,cur,P);
            btn.disabled=false; btn.textContent='Simulate my climb'; }
   }
   setTimeout(step,0);
 }
 $('run').addEventListener('click',run);
 
-function render(res,cur,expFloors,foodRun,P){
+function render(acc,ends,used,atts,starved,N,cur,P){
   var names=function(f){ return tierFor(f).map(function(s){return G.enemies[s[0]].n;}).join(', '); };
-  var land=cur+expFloors;
+  var med=median(ends), avgUsed=used.reduce(function(a,b){return a+b;},0)/N;
+  var avgAtt=atts.reduce(function(a,b){return a+b;},0)/N;
+  var hrs=avgAtt*P.mins/60;
   var ms=null; for(var i=0;i<MS.length;i++){ if(MS[i][0]>cur){ ms=MS[i]; break; } }
-  var msRow=ms?res.filter(function(r){return r.floor===ms[0];})[0]:null;
-  var msP=msRow?msRow.after*100:(ms?0:100);
-  var runs=msP>0?Math.ceil(1/(msP/100)):null;
-  var cp=Math.floor(cur/25)*25;
-  var bankT=cp+25, bankRow=res.filter(function(r){return r.floor===bankT;})[0];
-  var bankP=bankRow?bankRow.after*100:0;
+  var msP=ms?100*ends.filter(function(e){return e>=ms[0];}).length/N:100;
+  var runs=msP>0?Math.ceil(100/msP):null;
+  var cp=Math.floor(cur/25)*25, bankT=cp+25;
+  var bankP=100*ends.filter(function(e){return e>=bankT;}).length/N;
+  var starvePct=100*starved/N;
   var cls2=function(p){return p>=60?'safe':(p>=15?'risky':'fatal');};
+  var pileRan = starvePct>=50;
 
   $('verdict').innerHTML=
-   '<div class="v"><span>You end this run near</span><b class="mono c-'+cls2(100)+'">Floor '+Math.round(land)+
-     '</b><small>'+expFloors.toFixed(1)+' floors past your current '+cur+', on average</small></div>'+
-   (ms?'<div class="v"><span>Next milestone — f'+ms[0]+'</span><b class="mono c-'+cls2(msP)+'">'+msP.toFixed(0)+
-     '%</b><small>'+ms[1]+(runs&&msP>0?' — about '+runs+' run'+(runs>1?'s':''):' — out of reach')+'</small></div>':'')+
-   '<div class="v"><span>Bank checkpoint '+bankT+'</span><b class="mono c-'+cls2(bankP)+'">'+bankP.toFixed(0)+
-     '%</b><small>25 straight from floor '+(cp+1)+'</small></div>'+
-   '<div class="v"><span>Food for one run</span><b class="mono">'+Math.round(foodRun).toLocaleString()+
-     '</b><small>'+P._name+', across every floor you clear</small></div>';
+   '<div class="v"><span>Your pile gets you to</span><b class="mono c-safe">Floor '+med+
+     '</b><small>median of '+N+' climbs from floor '+cur+'</small></div>'+
+   '<div class="v"><span>Food it costs</span><b class="mono">'+Math.round(avgUsed).toLocaleString()+
+     '</b><small>'+P._name+', out of your '+P.pile.toLocaleString()+'</small></div>'+
+   (ms?'<div class="v"><span>Reach f'+ms[0]+'</span><b class="mono c-'+cls2(msP)+'">'+msP.toFixed(0)+
+     '%</b><small>'+ms[1]+(msP>0&&runs?' — about '+runs+' run'+(runs>1?'s':''):' — out of reach')+'</small></div>':'')+
+   '<div class="v"><span>Time for one run</span><b class="mono">'+Math.round(avgAtt)+
+     '</b><small>sessions &mdash; about '+(hrs<48?hrs.toFixed(0)+' hours':(hrs/24).toFixed(1)+' days')+' at '+P.mins+' min each</small></div>'+
+   '<div class="v"><span>What stops you</span><b class="mono c-'+(pileRan?'risky':'fatal')+'">'+
+     (pileRan?'Food':'Damage')+'</b><small>'+starvePct.toFixed(0)+'% of runs ended with the pile short of 300</small></div>';
 
-  $('rows').innerHTML=res.map(function(r){
-    var c=cls(r.clear), rp=r.reach*100;
-    return '<tr'+(r.capped?' class="capped"':'')+'><td class="mono">'+r.floor+'</td>'+
-      '<td style="color:var(--ink2);font-size:12.5px">'+names(r.floor)+'</td>'+
-      '<td class="num mono c-'+c+'"><b>'+r.clear.toFixed(1)+'%</b></td>'+
-      '<td><div class="bar"><i class="b-'+c+'" style="width:'+Math.max(2,r.clear)+'%"></i></div></td>'+
-      '<td class="num mono c-'+cls2(rp)+'">'+(rp>=99.5?'~100':rp.toFixed(rp<10?1:0))+'%</td>'+
-      '<td class="num mono">'+Math.round(r.dmg).toLocaleString()+'</td>'+
-      '<td class="num mono">'+Math.round(r.food)+(r.capped?' ⚠':'')+'</td></tr>';
-  }).join('');
+  var floors=Object.keys(acc).map(Number).sort(function(a,b){return a-b;});
+  $('rows').innerHTML=floors.filter(function(f){return acc[f].reach>=Math.max(2,N*0.02);}).map(function(f){
+    var a=acc[f], cl=pct(a.clear,a.reach), rp=100*a.reach/N, sh=pct(a.short,a.reach);
+    var c=cls(cl);
+    return '<tr'+(sh>50?' class="capped"':'')+'><td class="mono">'+f+'</td>'+
+      '<td style="color:var(--ink2);font-size:12.5px">'+names(f)+'</td>'+
+      '<td class="num mono c-'+c+'"><b>'+cl.toFixed(0)+'%</b></td>'+
+      '<td><div class="bar"><i class="b-'+c+'" style="width:'+Math.max(2,cl)+'%"></i></div></td>'+
+      '<td class="num mono c-'+cls2(rp)+'">'+(rp>=99.5?'~100':rp.toFixed(0))+'%</td>'+
+      '<td class="num mono">'+Math.round(a.dmg/a.reach).toLocaleString()+'</td>'+
+      '<td class="num mono">'+Math.round(a.food/a.reach)+(sh>50?' ⚠':'')+'</td></tr>';
+  }).join('') || '<tr><td colspan="7" style="padding:20px 10px;color:var(--muted)">No floors survived — check your food.</td></tr>';
 
-  var caps=res.filter(function(r){return r.capped;});
-  var m='<b>You cannot skip to a good floor.</b> Every attempt is your current floor + 1, so the run '+
-        'ends where the odds run out — around floor '+Math.round(land)+' for this setup. '+
-        'Your HP bar soaks the first '+Math.round(P.maxHp*P.thr)+' damage of every floor free.';
-  if(caps.length) m+='<br><b class="c-risky">⚠ Highlighted floors hit the 300-item cap.</b> There food is the '+
-        'wall, not Defence — more armour helps, more fish cannot.';
-  $('foodNote').className='note'+(caps.length?' warn':'');
+  var m='<b>Read the pile, not the floor.</b> Every attempt is your current floor + 1, and each one draws up to '+
+        '300 items from your stock of '+P.pile.toLocaleString()+'. ';
+  m += pileRan
+    ? '<b class="c-risky">Food is your limit here</b> — '+starvePct.toFixed(0)+'% of runs ended with the pile already short of a full 300 load. More '+P._name+' buys floors directly; more armour will not.'
+    : 'Your pile outlasts you — runs end on damage, not supply, so armour and Defence are what move the ceiling.';
+  m += ' Highlighted rows are floors you reached on a short load.';
+  $('foodNote').className='note'+(pileRan?' warn':'');
   $('foodNote').innerHTML=m;
 }
 curNote(); refresh(); run();
