@@ -116,7 +116,9 @@ code{font-family:ui-monospace,monospace;font-size:.88em;background:var(--raised)
   <h1>Infinite Tower Ceiling Calculator</h1>
   <p class="sub">Runs the game's own combat resolution &mdash; ported tick-for-tick from
   <code>CombatSimulator.kt</code> in Idle Fantasy 1.14.0 &mdash; over your gear and food, and reports
-  how high you clear. Every floor is 60 simulated minutes; only survival counts.</p>
+  how high you climb. The tower never lets you choose a floor &mdash; it always sends you to
+  <b>your current floor + 1</b> &mdash; so this simulates the actual run: you climb until you die,
+  then drop to the checkpoint at <code>(best &divide; 25) &times; 25</code>.</p>
 
   <div class="grid">
     <div class="stack">
@@ -170,15 +172,18 @@ code{font-family:ui-monospace,monospace;font-size:.88em;background:var(--raised)
       </section>
 
       <section class="panel">
-        <h2>Accuracy</h2>
+        <h2>Your climb</h2>
         <div class="pad stack">
-          <label><span>Runs per floor &mdash; higher is slower but steadier</span>
+          <label><span>Highest floor you have cleared</span><input type="number" id="cur" value="74" min="0" max="249"></label>
+          <p class="tiny" id="curNote" style="margin:0"></p>
+          <label><span>Simulated attempts per floor &mdash; this tool's accuracy, not a game setting</span>
             <select id="trials">
-              <option value="120">120 &mdash; fast</option>
-              <option value="300" selected>300 &mdash; balanced</option>
-              <option value="800">800 &mdash; precise</option>
+              <option value="80">80 &mdash; fast</option>
+              <option value="200" selected>200 &mdash; balanced</option>
+              <option value="500">500 &mdash; precise</option>
             </select></label>
-          <button class="go" id="run" type="button">Calculate my ceiling</button>
+          <button class="go" id="run" type="button">Simulate my climb</button>
+          <div class="bar" id="prog" hidden><i class="b-safe" style="width:0"></i></div>
         </div>
       </section>
     </div>
@@ -186,21 +191,23 @@ code{font-family:ui-monospace,monospace;font-size:.88em;background:var(--raised)
     <div>
       <div class="verdict" id="verdict"></div>
       <section class="panel">
-        <h2>Clear rate by floor</h2>
+        <h2>Your run, floor by floor</h2>
         <div class="tw"><table>
           <thead><tr>
-            <th>Floor</th><th>Enemies</th><th class="num">Clear</th><th style="width:100px">&nbsp;</th>
-            <th class="num">Damage taken</th><th class="num">Food used</th>
+            <th>Floor</th><th>Enemies</th><th class="num">Clear</th><th style="width:96px">&nbsp;</th>
+            <th class="num">Reach it</th><th class="num">Damage</th><th class="num">Food</th>
           </tr></thead>
-          <tbody id="rows"><tr><td colspan="6" style="color:var(--muted);padding:22px 10px">
-            Press <b>Calculate my ceiling</b>.</td></tr></tbody>
+          <tbody id="rows"><tr><td colspan="7" style="color:var(--muted);padding:22px 10px">
+            Press <b>Simulate my climb</b>.</td></tr></tbody>
         </table></div>
         <div class="note" id="foodNote"></div>
       </section>
       <footer id="foot">
-        Safe means a 95%+ clear per attempt. That threshold is not arbitrary: a death drops you to the
-        checkpoint at <code>(best floor &divide; 25) &times; 25</code>, so banking a new checkpoint needs
-        <b>25 clears in a row</b>. At 95% that is a 28% chance per run of 25; at 70% it is 0.01%.
+<b>Reach it</b> is the chance of getting to that floor at all in one run &mdash; the product of
+        every clear rate below it &mdash; because floors are forced contiguous
+        (<code>QueuedSessionStarter.kt:799</code>). A death sends you back to
+        <code>(best floor &divide; 25) &times; 25</code>, so a checkpoint needs <b>25 clears in a row</b>.
+        Best floor is permanent, so a deep run still banks every milestone it passes.
       </footer>
     </div>
   </div>
@@ -333,75 +340,89 @@ function params(){
 }
 function cls(p){ return p>=95?'safe':(p>=50?'risky':'fatal'); }
 
+var MS=[[10,"Tower Ring"],[20,"+1% tower XP"],[30,"5,000 coins"],[40,"Tower Shield (80 Def)"],
+ [50,"Tower Amulet"],[60,"+50 max HP"],[70,"+2% tower XP"],[80,"25,000 coins"],
+ [90,"Tower Helm (82 Def)"],[100,"Stone Guardian pet"],[110,"+1% coin drops"],[120,"Tower Plate (132 Def)"],
+ [130,"+2% tower XP"],[140,"100,000 coins"],[150,"Greaves, Plateskirt, Boots"],[160,"+50 max HP"],
+ [170,"+1% coin drops"],[180,"Tower Sword"],[190,"+2% tower XP"],[200,"Tower Cape"],[210,"+50 max HP"],
+ [220,"Tower Crossbow"],[230,"+1% coin drops"],[240,"+2% tower XP"],[250,"Void Staff"]];
+
+function curNote(){
+  var c=+$('cur').value, cp=Math.floor(c/25)*25;
+  $('curNote').innerHTML='Next attempt is <b>floor '+(c+1)+'</b> — you never pick. Die anywhere and you '+
+    'restart from <b>floor '+(cp+1)+'</b> (checkpoint '+cp+'); your best floor of '+c+' is kept.';
+}
+$('cur').addEventListener('input',curNote);
+
 function run(){
-  var P=params(), n=+$('trials').value, btn=$('run');
-  btn.disabled=true; btn.textContent='Simulating…';
-  setTimeout(function(){
-    var floors=[], f;
-    for(f=10;f<=100;f+=10) floors.push(f);
-    for(f=110;f<=250;f+=10) floors.push(f);
-    var res=[], safe=0, surv=0;
-    for(var i=0;i<floors.length;i++){
-      var r=rateAt(floors[i],P,n);
-      res.push(r);
-      if(r.clear>=95) safe=floors[i];
-      if(r.clear>=50) surv=floors[i];
-      if(r.clear<3 && floors[i]>20) break;
+  var P=params(), n=+$('trials').value, cur=+$('cur').value, btn=$('run'), prog=$('prog');
+  btn.disabled=true; btn.textContent='Simulating…'; prog.hidden=false;
+  var bar=prog.querySelector('i');
+  var res=[], f=cur+1, reach=1, expFloors=0, foodRun=0;
+  function step(){
+    var budget=4;
+    while(budget-->0 && f<=250){
+      var r=rateAt(f,P,n);
+      r.reach=reach;                    /* chance of arriving at this floor at all */
+      foodRun += r.food*reach;
+      reach *= r.clear/100;
+      r.after=reach;                    /* chance of clearing it too */
+      expFloors += reach;
+      res.push(r); f++;
+      if(reach<0.005) break;
     }
-    /* refine the 95% boundary to the nearest floor */
-    if(safe>0 && safe<250){
-      for(f=safe+1; f<=Math.min(250,safe+10); f++){
-        if(rateAt(f,P,n).clear>=95) safe=f; else break;
-      }
-    }
-    if(surv>0 && surv<250){
-      for(f=surv+1; f<=Math.min(250,surv+10); f++){
-        if(rateAt(f,P,n).clear>=50) surv=f; else break;
-      }
-    }
-    render(res,safe,surv,P);
-    btn.disabled=false; btn.textContent='Calculate my ceiling';
-  },20);
+    bar.style.width=Math.min(100,Math.max(4,100*(1-reach)))+'%';
+    if(f<=250 && reach>=0.005){ setTimeout(step,0); }
+    else { prog.hidden=true; render(res,cur,expFloors,foodRun,P);
+           btn.disabled=false; btn.textContent='Simulate my climb'; }
+  }
+  setTimeout(step,0);
 }
 $('run').addEventListener('click',run);
 
-function render(res,safe,surv,P){
+function render(res,cur,expFloors,foodRun,P){
   var names=function(f){ return tierFor(f).map(function(s){return G.enemies[s[0]].n;}).join(', '); };
-  var near=null;
-  for(var i=0;i<res.length;i++){ if(res[i].floor<=safe) near=res[i]; }
-  var perFloor = near?Math.round(near.food):0;
-  var bank = safe>0 ? Math.floor(safe/25)*25+25 : 25;
+  var land=cur+expFloors;
+  var ms=null; for(var i=0;i<MS.length;i++){ if(MS[i][0]>cur){ ms=MS[i]; break; } }
+  var msRow=ms?res.filter(function(r){return r.floor===ms[0];})[0]:null;
+  var msP=msRow?msRow.after*100:(ms?0:100);
+  var runs=msP>0?Math.ceil(1/(msP/100)):null;
+  var cp=Math.floor(cur/25)*25;
+  var bankT=cp+25, bankRow=res.filter(function(r){return r.floor===bankT;})[0];
+  var bankP=bankRow?bankRow.after*100:0;
+  var cls2=function(p){return p>=60?'safe':(p>=15?'risky':'fatal');};
 
-  $('verdict').innerHTML =
-    '<div class="v"><span>Safe ceiling &mdash; 95%+</span><b class="mono c-'+(safe?'safe':'fatal')+'">'+
-      (safe?('Floor '+safe):'None')+'</b><small>'+(safe?'You can grind here and expect to bank checkpoints.':'Not even floor 10 is safe with this setup.')+'</small></div>'+
-    '<div class="v"><span>Coin-flip &mdash; 50%+</span><b class="mono c-risky">'+(surv?('Floor '+surv):'None')+
-      '</b><small>Good for pushing your best-floor record, not for banking.</small></div>'+
-    '<div class="v"><span>Food per safe floor</span><b class="mono">'+perFloor+'</b><small>'+P._name+
-      ', out of the 300 cap</small></div>'+
-    '<div class="v"><span>To bank floor '+bank+'</span><b class="mono">'+(perFloor*25).toLocaleString()+
-      '</b><small>25 clears in a row &mdash; that is the real cost</small></div>';
+  $('verdict').innerHTML=
+   '<div class="v"><span>You end this run near</span><b class="mono c-'+cls2(100)+'">Floor '+Math.round(land)+
+     '</b><small>'+expFloors.toFixed(1)+' floors past your current '+cur+', on average</small></div>'+
+   (ms?'<div class="v"><span>Next milestone — f'+ms[0]+'</span><b class="mono c-'+cls2(msP)+'">'+msP.toFixed(0)+
+     '%</b><small>'+ms[1]+(runs&&msP>0?' — about '+runs+' run'+(runs>1?'s':''):' — out of reach')+'</small></div>':'')+
+   '<div class="v"><span>Bank checkpoint '+bankT+'</span><b class="mono c-'+cls2(bankP)+'">'+bankP.toFixed(0)+
+     '%</b><small>25 straight from floor '+(cp+1)+'</small></div>'+
+   '<div class="v"><span>Food for one run</span><b class="mono">'+Math.round(foodRun).toLocaleString()+
+     '</b><small>'+P._name+', across every floor you clear</small></div>';
 
-  $('rows').innerHTML = res.map(function(r){
-    var c=cls(r.clear);
+  $('rows').innerHTML=res.map(function(r){
+    var c=cls(r.clear), rp=r.reach*100;
     return '<tr'+(r.capped?' class="capped"':'')+'><td class="mono">'+r.floor+'</td>'+
       '<td style="color:var(--ink2);font-size:12.5px">'+names(r.floor)+'</td>'+
       '<td class="num mono c-'+c+'"><b>'+r.clear.toFixed(1)+'%</b></td>'+
       '<td><div class="bar"><i class="b-'+c+'" style="width:'+Math.max(2,r.clear)+'%"></i></div></td>'+
+      '<td class="num mono c-'+cls2(rp)+'">'+(rp>=99.5?'~100':rp.toFixed(rp<10?1:0))+'%</td>'+
       '<td class="num mono">'+Math.round(r.dmg).toLocaleString()+'</td>'+
       '<td class="num mono">'+Math.round(r.food)+(r.capped?' ⚠':'')+'</td></tr>';
   }).join('');
 
   var caps=res.filter(function(r){return r.capped;});
-  var msg='<b>Reading this:</b> damage taken is what the hour throws at you; food used is how much of your '+
-          P.food+'-item stock it eats. Your own HP bar absorbs the first '+Math.round(P.maxHp*P.thr)+
-          ' free, which is why low floors cost nothing.';
-  if(caps.length) msg+='<br><b class="c-risky">⚠ Highlighted floors hit the 300-item cap.</b> There, food is '+
-          'the wall, not Defence — more armour helps, more fish cannot.';
+  var m='<b>You cannot skip to a good floor.</b> Every attempt is your current floor + 1, so the run '+
+        'ends where the odds run out — around floor '+Math.round(land)+' for this setup. '+
+        'Your HP bar soaks the first '+Math.round(P.maxHp*P.thr)+' damage of every floor free.';
+  if(caps.length) m+='<br><b class="c-risky">⚠ Highlighted floors hit the 300-item cap.</b> There food is the '+
+        'wall, not Defence — more armour helps, more fish cannot.';
   $('foodNote').className='note'+(caps.length?' warn':'');
-  $('foodNote').innerHTML=msg;
+  $('foodNote').innerHTML=m;
 }
-refresh(); run();
+curNote(); refresh(); run();
 </script>
 </body>
 </html>
